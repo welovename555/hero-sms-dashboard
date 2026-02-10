@@ -1,0 +1,18 @@
+{
+  "name": "hero-sms-dashboard-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "install-all": "npm install && npm install --workspace=server && npm install --workspace=web",
+    "dev": "concurrently \"npm:dev --workspace=server\" \"npm:dev --workspace=web\"",
+    "build": "npm run build --workspace=server && npm run build --workspace=web",
+    "start": "npm run start --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
