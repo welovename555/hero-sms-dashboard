@@ -1,0 +1,11 @@
+run = "npm run dev"
+entrypoint = "server/src/index.ts"
+
+[modules]
+nodeBundle = true
+
+[nix]
+channel = "stable-23_11"
+
+[hints]
+no-typescript-setup = true
