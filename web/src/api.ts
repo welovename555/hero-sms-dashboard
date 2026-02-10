@@ -8,14 +8,13 @@ const api = axios.create({
 export default api;
 
 export const getBalance = () => api.get('/balance').then(res => res.data);
-export const getPrices = (country?: number, service?: string) => 
-  api.get('/prices', { params: { country, service } }).then(res => res.data);
-export const buyNumber = (country: number, service: string, operator?: string) => 
-  api.post('/orders/buy', { country, service, operator }).then(res => res.data);
-export const getOrders = () => api.get('/orders').then(res => res.data);
+export const getServices = (country?: number) => api.get('/services', { params: { country } }).then(res => res.data);
+export const getCountries = () => api.get('/countries').then(res => res.data);
+export const getTopPrices = (service: string) => api.get('/prices/top', { params: { service } }).then(res => res.data);
+export const buyNumber = (country: number, service: string) => api.post('/orders/buy', { country, service }).then(res => res.data);
+export const getActiveOrders = () => api.get('/orders/active').then(res => res.data);
 export const getOrderStatus = (id: string) => api.get(`/orders/${id}/status`).then(res => res.data);
-export const setOrderStatus = (id: string, status: number) => 
-  api.post(`/orders/${id}/action`, { status }).then(res => res.data);
-export const saveApiKey = (apiKey: string) => api.post('/session/key', { apiKey }).then(res => res.data);
-export const clearApiKey = () => api.delete('/session/key').then(res => res.data);
-export const checkAuth = () => api.get('/session/check').then(res => res.data);
+export const setOrderStatus = (id: string, status: number) => api.post(`/orders/${id}/action`, { status }).then(res => res.data);
+export const saveApiKey = (apiKey: string, persist: boolean) => api.post('/session/key', { apiKey, persist }).then(res => res.data);
+export const clearApiKey = (clearPersist: boolean) => api.delete('/session/key', { params: { clearPersist } }).then(res => res.data);
+export const checkConfig = () => api.get('/config').then(res => res.data);

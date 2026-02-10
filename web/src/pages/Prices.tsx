@@ -1,124 +1,118 @@
 import { useState, useEffect } from 'react';
-import { getPrices } from '../api';
-import { Search, Copy, Loader2 } from 'lucide-react';
+import { getServices, getTopPrices } from '../api';
+import { Search, Loader2, Globe, DollarSign, Hash } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Prices = () => {
-  const [prices, setPrices] = useState<any>(null);
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedService, setSelectedService] = useState('');
+  const [topCountries, setTopCountries] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [country, setCountry] = useState('0'); // Default Russia for example
 
-  const fetchPrices = async () => {
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const data = await getServices();
+        if (Array.isArray(data)) {
+          setServices(data);
+        } else if (data.services) {
+          setServices(data.services);
+        }
+      } catch (e) {}
+    };
+    fetchServices();
+  }, []);
+
+  const handleCheckPrices = async () => {
+    if (!selectedService) return toast.error('กรุณาเลือกบริการ');
     setLoading(true);
     try {
-      const data = await getPrices(Number(country));
-      setPrices(data);
+      const data = await getTopPrices(selectedService);
+      // Hero-SMS returns an object where keys are country IDs
+      const list = Object.entries(data).map(([id, details]: [string, any]) => ({
+        id,
+        name: details.name || `Country ${id}`,
+        count: details.count,
+        price: details.price || (details.physicalPriceMap ? Object.values(details.physicalPriceMap)[0] : 'N/A')
+      })).sort((a, b) => Number(a.price) - Number(b.price));
+      setTopCountries(list);
     } catch (error: any) {
-      toast.error('Failed to fetch prices');
+      toast.error('ไม่สามารถดึงข้อมูลราคาได้');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchPrices();
-  }, [country]);
-
-  const copyJson = (row: any) => {
-    navigator.clipboard.writeText(JSON.stringify(row, null, 2));
-    toast.success('JSON copied to clipboard');
-  };
-
-  // Prices API usually returns { [countryId]: { [serviceCode]: { cost, count } } }
-  const priceList = prices && prices[country] ? Object.entries(prices[country]).map(([service, details]: [string, any]) => ({
-    service,
-    cost: details.cost,
-    count: details.count
-  })) : [];
-
-  const filteredPrices = priceList.filter(p => 
-    p.service.toLowerCase().includes(search.toLowerCase())
+  const filteredServices = services.filter(s => 
+    s.name.toLowerCase().includes(search.toLowerCase()) || 
+    s.code.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Service Prices</h2>
-      </div>
+      <h2 className="text-2xl font-bold">📊 เปรียบเทียบราคา</h2>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search service (e.g. go, wa, tg)..."
-            className="w-full pl-10 pr-4 py-2 border dark:border-gray-800 dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select 
-          className="px-4 py-2 border dark:border-gray-800 dark:bg-gray-900 rounded-lg outline-none"
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-        >
-          <option value="0">Russia (0)</option>
-          <option value="1">Ukraine (1)</option>
-          <option value="2">Kazakhstan (2)</option>
-          <option value="6">Indonesia (6)</option>
-          <option value="12">USA (12)</option>
-          <option value="22">Thailand (22)</option>
-        </select>
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 border dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 border-b dark:border-gray-800">
-                <th className="px-6 py-4 font-semibold text-sm">Service</th>
-                <th className="px-6 py-4 font-semibold text-sm">Price (RUB)</th>
-                <th className="px-6 py-4 font-semibold text-sm">Available</th>
-                <th className="px-6 py-4 font-semibold text-sm text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y dark:divide-gray-800">
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center">
-                    <Loader2 className="animate-spin mx-auto text-blue-500" size={32} />
-                    <p className="mt-2 text-gray-500">Loading prices...</p>
-                  </td>
-                </tr>
-              ) : filteredPrices.length > 0 ? (
-                filteredPrices.map((p) => (
-                  <tr key={p.service} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                    <td className="px-6 py-4 font-medium">{p.service}</td>
-                    <td className="px-6 py-4 text-blue-600 dark:text-blue-400 font-bold">{p.cost}</td>
-                    <td className="px-6 py-4 text-gray-500">{p.count}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => copyJson(p)}
-                        className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
-                        title="Copy JSON"
-                      >
-                        <Copy size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                    No services found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-xl border dark:border-gray-800 shadow-sm space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="md:col-span-2 space-y-2">
+            <label className="text-sm font-medium text-gray-500">ค้นหาและเลือกบริการ</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="พิมพ์ชื่อบริการ เช่น Telegram, WhatsApp..."
+                className="w-full pl-10 pr-4 py-2 border dark:border-gray-800 dark:bg-gray-950 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select 
+              className="w-full px-4 py-2 border dark:border-gray-800 dark:bg-gray-950 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 mt-2"
+              value={selectedService}
+              onChange={(e) => setSelectedService(e.target.value)}
+            >
+              <option value="">-- เลือกบริการ --</option>
+              {filteredServices.map(s => (
+                <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          </div>
+          <button 
+            onClick={handleCheckPrices}
+            disabled={loading || !selectedService}
+            className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 h-[42px]"
+          >
+            {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : '🔍 ดูราคา'}
+          </button>
         </div>
       </div>
+
+      {topCountries.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {topCountries.map((c) => (
+            <div key={c.id} className="bg-white dark:bg-gray-900 p-4 rounded-xl border dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Globe size={18} className="text-blue-500" />
+                  <span className="font-bold">{c.name}</span>
+                </div>
+                <span className="text-xs text-gray-400">ID: {c.id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1 text-green-600 font-bold">
+                  <DollarSign size={16} />
+                  <span>{c.price} RUB</span>
+                </div>
+                <div className="flex items-center gap-1 text-gray-500 text-sm">
+                  <Hash size={14} />
+                  <span>{c.count} เบอร์</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

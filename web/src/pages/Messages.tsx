@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { getOrderStatus, getOrders } from '../api';
-import { RefreshCw, Copy, Clock, Play, Square, Loader2 } from 'lucide-react';
+import { getOrderStatus, getActiveOrders, setOrderStatus } from '../api';
+import { RefreshCw, Copy, Clock, Play, Square, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 
@@ -8,15 +8,15 @@ const Messages = () => {
   const [searchParams] = useSearchParams();
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState(searchParams.get('id') || '');
-  const [status, setStatus] = useState<string>('');
+  const [statusData, setStatusData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [intervalTime, setIntervalTime] = useState(10);
+  const [intervalTime, setIntervalTime] = useState(5);
   const timerRef = useRef<any>(null);
 
   const fetchActiveOrders = async () => {
     try {
-      const data = await getOrders();
+      const data = await getActiveOrders();
       setActiveOrders(data.activeActivations || []);
     } catch (e) {}
   };
@@ -26,9 +26,13 @@ const Messages = () => {
     setLoading(true);
     try {
       const data = await getOrderStatus(selectedId);
-      setStatus(data.status);
+      setStatusData(data);
+      if (data.status === 'ok') {
+        setAutoRefresh(false);
+        toast.success('ได้รับรหัสยืนยันแล้ว!');
+      }
     } catch (error: any) {
-      toast.error('Failed to fetch status');
+      // toast.error('ไม่สามารถดึงสถานะได้');
     } finally {
       setLoading(false);
     }
@@ -39,7 +43,13 @@ const Messages = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedId) checkStatus();
+    if (selectedId) {
+      checkStatus();
+      // Auto start refresh when selecting a new order if it's not already finished
+      if (statusData?.status !== 'ok') {
+        setAutoRefresh(true);
+      }
+    }
   }, [selectedId]);
 
   useEffect(() => {
@@ -53,32 +63,39 @@ const Messages = () => {
 
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast.success('คัดลอกแล้ว');
   };
 
-  // Parse status: STATUS_WAIT_CODE, STATUS_OK:code
-  const isCodeReceived = status.startsWith('STATUS_OK:');
-  const code = isCodeReceived ? status.split(':')[1] : null;
+  const handleAction = async (status: number) => {
+    try {
+      await setOrderStatus(selectedId, status);
+      toast.success('ดำเนินการเรียบร้อย');
+      checkStatus();
+      fetchActiveOrders();
+    } catch (e) {
+      toast.error('การดำเนินการล้มเหลว');
+    }
+  };
+
+  const currentOrder = activeOrders.find(o => o.activationId === selectedId);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Messages (Inbox)</h2>
-      </div>
+      <h2 className="text-2xl font-bold">📩 ข้อความ (Inbox)</h2>
 
       <div className="bg-white dark:bg-gray-900 p-6 rounded-xl border dark:border-gray-800 shadow-sm space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-500">Select Active Order</label>
+            <label className="text-sm font-medium text-gray-500">เลือกเบอร์ที่ต้องการดู</label>
             <select 
-              className="w-full px-4 py-2 border dark:border-gray-800 dark:bg-gray-950 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border dark:border-gray-800 dark:bg-gray-950 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
             >
-              <option value="">-- Select an order --</option>
+              <option value="">-- เลือกรายการ --</option>
               {activeOrders.map(o => (
                 <option key={o.activationId} value={o.activationId}>
-                  ID: {o.activationId} (+{o.phoneNumber}) - {o.serviceCode}
+                  +{o.phoneNumber} ({o.serviceCode.toUpperCase()})
                 </option>
               ))}
             </select>
@@ -86,10 +103,10 @@ const Messages = () => {
 
           <div className="flex items-end gap-4">
             <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium text-gray-500">Auto Refresh (sec)</label>
+              <label className="text-sm font-medium text-gray-500">รีเฟรชอัตโนมัติ (วินาที)</label>
               <input 
                 type="number" 
-                min="5" 
+                min="3" 
                 max="60"
                 value={intervalTime}
                 onChange={(e) => setIntervalTime(Number(e.target.value))}
@@ -98,64 +115,81 @@ const Messages = () => {
             </div>
             <button 
               onClick={() => setAutoRefresh(!autoRefresh)}
-              disabled={!selectedId}
-              className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors h-[42px] ${
+              disabled={!selectedId || statusData?.status === 'ok'}
+              className={`flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-bold transition-colors h-[42px] min-w-[140px] ${
                 autoRefresh 
                 ? 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400' 
                 : 'bg-green-100 text-green-600 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400'
               } disabled:opacity-50`}
             >
               {autoRefresh ? <Square size={18} /> : <Play size={18} />}
-              {autoRefresh ? 'Stop' : 'Start Auto'}
+              {autoRefresh ? 'หยุด' : 'เริ่มดึงข้อมูล'}
             </button>
           </div>
         </div>
 
         <div className="pt-6 border-t dark:border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Status / Message</h3>
-            <button 
-              onClick={checkStatus} 
-              disabled={loading || !selectedId}
-              className="text-blue-500 hover:text-blue-600 disabled:opacity-50"
-            >
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </button>
-          </div>
-
           {!selectedId ? (
             <div className="py-12 text-center text-gray-500 border-2 border-dashed dark:border-gray-800 rounded-xl">
-              Please select an order to view messages
+              กรุณาเลือกเบอร์โทรศัพท์เพื่อดูข้อความ
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Clock size={18} className="text-gray-400" />
-                  <span className="text-sm font-medium uppercase">{status || 'Checking...'}</span>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full">
+                    <Clock size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">สถานะปัจจุบัน</p>
+                    <p className="text-lg font-bold uppercase text-blue-600 dark:text-blue-400">
+                      {statusData?.status === 'waiting' ? '⏳ กำลังรอ SMS...' : 
+                       statusData?.status === 'ok' ? '✅ ได้รับรหัสแล้ว' : 
+                       statusData?.status || 'กำลังตรวจสอบ...'}
+                    </p>
+                  </div>
                 </div>
-                {isCodeReceived && (
-                  <button 
-                    onClick={() => copyText(code!)}
-                    className="flex items-center gap-2 text-blue-500 hover:text-blue-600 text-sm font-medium"
-                  >
-                    <Copy size={16} />
-                    Copy Code
-                  </button>
-                )}
+                <button 
+                  onClick={checkStatus} 
+                  disabled={loading}
+                  className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
+                >
+                  <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
+                </button>
               </div>
 
-              {isCodeReceived ? (
-                <div className="p-8 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-xl text-center">
-                  <p className="text-sm text-blue-500 mb-2 uppercase font-semibold tracking-wider">Verification Code</p>
-                  <p className="text-5xl font-mono font-bold text-blue-600 dark:text-blue-400">{code}</p>
+              {statusData?.status === 'ok' ? (
+                <div className="p-8 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20 rounded-2xl text-center space-y-4">
+                  <p className="text-sm text-green-600 dark:text-green-400 font-bold tracking-widest uppercase">Verification Code</p>
+                  <p className="text-6xl font-mono font-black text-green-700 dark:text-green-300 tracking-tighter">{statusData.code}</p>
+                  <button 
+                    onClick={() => copyText(statusData.code)}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-full font-bold hover:bg-green-700 transition-colors"
+                  >
+                    <Copy size={18} /> คัดลอกรหัส
+                  </button>
                 </div>
               ) : (
-                <div className="p-8 text-center">
-                  <Loader2 className="animate-spin mx-auto text-gray-300 mb-4" size={40} />
-                  <p className="text-gray-500">Waiting for incoming SMS...</p>
+                <div className="p-12 text-center space-y-4 bg-gray-50 dark:bg-gray-800/30 rounded-2xl border border-dashed dark:border-gray-800">
+                  <Loader2 className="animate-spin mx-auto text-blue-500" size={48} />
+                  <p className="text-gray-500 font-medium">ระบบกำลังรอข้อความ SMS เข้ามายังเบอร์ +{currentOrder?.phoneNumber}</p>
                 </div>
               )}
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleAction(6)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-colors"
+                >
+                  <CheckCircle size={20} /> ยืนยันสำเร็จ (Complete)
+                </button>
+                <button 
+                  onClick={() => handleAction(8)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors"
+                >
+                  <XCircle size={20} /> ยกเลิกเบอร์นี้ (Cancel)
+                </button>
+              </div>
             </div>
           )}
         </div>
